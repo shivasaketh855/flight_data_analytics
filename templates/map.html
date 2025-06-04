@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Live Flights Over India</title>
+    <meta http-equiv="refresh" content="30">
+
+    <!-- ✅ Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- ✅ Leaflet Map CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- ✅ DataTables CSS -->
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
+    <style>
+        #map {
+            height: 60vh;
+            margin-bottom: 30px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+        }
+
+        body {
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        h2, h3 {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 class="text-center">Live Flights Over India ✈️</h2>
+    <p class="text-muted text-center"><b>Last updated at:</b> {{ now }}</p>
+
+    <!-- Filter Form -->
+    <form method="get" action="/" class="row g-3 align-items-center mb-4">
+        <div class="col-auto">
+            <label class="form-label">Min Speed (m/s):</label>
+            <input type="number" name="min_speed" class="form-control" placeholder="e.g. 200">
+        </div>
+        <div class="col-auto">
+            <label class="form-label">Min Altitude (m):</label>
+            <input type="number" name="min_altitude" class="form-control" placeholder="e.g. 10000">
+        </div>
+        <div class="col-auto">
+            <label class="form-label d-block">&nbsp;</label>
+            <button type="submit" class="btn btn-primary">Filter Flights</button>
+        </div>
+    </form>
+
+    <!-- Map Display -->
+    <div id="map"></div>
+
+    <!-- Flight Data Table -->
+    <h3>Flight Data Table</h3>
+    <div class="table-responsive">
+        <table id="flights-table" class="table table-striped table-bordered">
+            <thead class="table-dark">
+                <tr>
+                    <th>Callsign</th>
+                    <th>Country</th>
+                    <th>Altitude (m)</th>
+                    <th>Speed (m/s)</th>
+                    <th>Latitude</th>
+                    <th>Longitude</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for flight in flights %}
+                    <tr>
+                        <td>{{ flight[1] }}</td>
+                        <td>{{ flight[2] }}</td>
+                        <td>{{ flight[7] }}</td>
+                        <td>{{ flight[9] }}</td>
+                        <td>{{ flight[6] }}</td>
+                        <td>{{ flight[5] }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ✅ Plan My Flight Button -->
+    <div class="text-center mt-4">
+        <a href="/plan" class="btn btn-success btn-lg">✈️ Plan My Flight</a>
+    </div>
+
+    <!-- ✅ JS Libraries -->
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <script>
+        $(document).ready(function () {
+            $('#flights-table').DataTable();
+        });
+
+        const flights = JSON.parse('{{ flights | tojson | safe }}');
+
+        const map = L.map('map').setView([22.9734, 78.6569], 5); // India center
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        const planeIcon = L.icon({
+            iconUrl: '/static/plane.png',
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -10]
+        });
+
+        flights.forEach(flight => {
+            const lat = flight[6];
+            const lon = flight[5];
+            const callsign = flight[1];
+            const speed = flight[9];
+            const altitude = flight[7];
+
+            if (lat && lon) {
+                L.marker([lat, lon], { icon: planeIcon }).addTo(map)
+                    .bindPopup(`<b>Flight:</b> ${callsign}<br>
+                                <b>Altitude:</b> ${altitude} m<br>
+                                <b>Speed:</b> ${speed} m/s`);
+            }
+        });
+    </script>
+</div>
+</body>
+</html>

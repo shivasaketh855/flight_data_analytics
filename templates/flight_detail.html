@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Flight {{ callsign }} Details</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            padding: 40px;
+            background-color: #f4f9ff;
+        }
+        .card {
+            margin-top: 30px;
+        }
+        canvas {
+            max-width: 900px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2 class="text-center mb-4">📊 Flight Details for <strong>{{ callsign }}</strong></h2>
+
+    <!-- ✅ View Details Section -->
+    {% if flight %}
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <h5 class="card-title">
+                {{ flight.airline.name }} — {{ callsign }}
+                {% if delay > 0 %}
+                    <span class="badge bg-danger ms-2">❌ Delayed</span>
+                {% else %}
+                    <span class="badge bg-success ms-2">✅ On Time</span>
+                {% endif %}
+            </h5>
+            <hr>
+            <p><b>Departure:</b> {{ flight.departure.airport }}<br>
+               <b>Scheduled:</b> {{ flight.departure.scheduled }}<br>
+               <b>Actual:</b> {{ flight.departure.actual or 'N/A' }}</p>
+
+            <p><b>Arrival:</b> {{ flight.arrival.airport }}<br>
+               <b>Scheduled:</b> {{ flight.arrival.scheduled }}<br>
+               <b>Actual:</b> {{ flight.arrival.actual or 'N/A' }}</p>
+
+            <p><b>Status:</b> {{ flight.flight_status | title }}</p>
+            <p><b>Delay:</b> {{ delay if delay else 0 }} minutes</p>
+        </div>
+    </div>
+    {% endif %}
+    <div class="card mt-4">
+        <div class="card-body text-center">
+            <h5>🎯 Flight Accuracy & Prediction</h5>
+            <p><b>Avg Delay:</b> {{ avg_delay }} mins</p>
+            <p><b>Accuracy:</b> {{ on_time_percent }}% On-Time</p>
+            <p><b>Prediction:</b> {{ prediction }}</p>
+        </div>
+    </div>
+    
+
+    <!-- ✅ Chart Summary -->
+    <h4 class="text-center mt-5">📈 Flight Analytics</h4>
+    <p class="text-center text-muted fst-italic" style="font-size: 0.9rem;">
+        📌 Charts below show estimated delay trends based on historical patterns — for informational purposes only.
+    </p>
+    
+    <p class="text-center mt-3">
+        Out of <b>{{ history|length }}</b> flights:<br>
+        ✅ <b>{{ on_time_flights }}</b> were on-time (<b>{{ on_time_percent }}%</b>)<br>
+        ❌ <b>{{ delayed_flights }}</b> were delayed (<b>{{ delayed_percent }}%</b>)
+    </p>
+
+    <!-- ✅ Charts -->
+    <canvas id="chart1"></canvas>
+    <canvas id="chart2"></canvas>
+    <canvas id="chart3"></canvas>
+
+    <!-- ✅ Chart Script -->
+    <script>
+        const historyData = {{ history | tojson | safe }};
+
+        const formatDate = dateStr => dateStr ? dateStr.substring(0, 10) : 'Unknown';
+
+        const groupBy = (array, getKey) => {
+            return array.reduce((acc, item) => {
+                const key = getKey(item);
+                if (!acc[key]) acc[key] = [];
+                acc[key].push(item);
+                return acc;
+            }, {});
+        };
+
+        const grouped = groupBy(historyData, d => formatDate(d.departure.scheduled));
+        const labels = Object.keys(grouped);
+        const avgDelays = labels.map(label => {
+            const group = grouped[label];
+            const total = group.reduce((sum, f) => sum + (f.departure.delay || 0), 0);
+            return Math.round(total / group.length);
+        });
+
+        // Line Chart
+        new Chart(document.getElementById('chart1').getContext('2d'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Avg Delay (min)',
+                    data: avgDelays,
+                    borderColor: '#ff6384',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: { display: true, text: 'Delays Over Time' },
+                    tooltip: { mode: 'index', intersect: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, title: { display: true, text: 'Minutes' } },
+                    x: { title: { display: true, text: 'Date' } }
+                }
+            }
+        });
+
+        // Pie Chart
+        const totalFlights = historyData.length;
+        const delayedFlights = historyData.filter(f => f.departure && f.departure.delay && f.departure.delay > 0).length;
+        const onTimeFlights = totalFlights - delayedFlights;
+
+        new Chart(document.getElementById('chart2').getContext('2d'), {
+            type: 'pie',
+            data: {
+                labels: ['On-Time', 'Delayed'],
+                datasets: [{
+                    data: [onTimeFlights, delayedFlights],
+                    backgroundColor: ['#28a745', '#dc3545']
+                }]
+            },
+            options: {
+                plugins: {
+                    title: {
+                        display: true,
+                        text: '📊 On-Time vs Delayed Flights'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const value = context.raw;
+                                const percentage = ((value / total) * 100).toFixed(1);
+                                return `${context.label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        // Bar Chart
+        const airlineMap = {};
+        historyData.forEach(f => {
+            const name = f.airline.name;
+            if (!airlineMap[name]) airlineMap[name] = { delaySum: 0, count: 0 };
+            airlineMap[name].delaySum += f.departure.delay || 0;
+            airlineMap[name].count++;
+        });
+
+        const airlineLabels = Object.keys(airlineMap);
+        const avgDelaysByAirline = airlineLabels.map(a => Math.round(airlineMap[a].delaySum / airlineMap[a].count));
+
+        new Chart(document.getElementById('chart3').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: airlineLabels,
+                datasets: [{
+                    label: 'Avg Delay (min)',
+                    data: avgDelaysByAirline,
+                    backgroundColor: '#4bc0c0'
+                }]
+            },
+            options: {
+                plugins: { title: { display: true, text: 'Airline-wise Average Delay' } },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+
+    <div class="text-center mt-4">
+        <a href="/plan" class="btn btn-outline-primary">🔙 Back to Planner</a>
+    </div>
+</div>
+</body>
+</html>
